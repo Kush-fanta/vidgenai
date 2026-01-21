@@ -1,0 +1,14 @@
+{
+  "hi": { "male": ["zT03pEAEi0VHKciJODfn","WeK8ylKjTV2trMlayizC","zs7UfyHqCCmny7uTxCYi","Sxk6njaoa7XLsAFT7WcN","IvLWq57RKibBrqZGpQrC"], "female": ["SZfY4K69FwXus87eayHK","1qEiC6qsybMkmnNdVMbK","ni6cdqyS9wBvic5LPA7M","gHu9GtaHOXcSqFTK06ux","FFmp1h1BMl0iVHA0JxrI"] },
+  "en": { "male": ["wJ5MX7uuKXZwFqGdWM4N","nwj0s2LU9bDWRKND5yzA","vO7hjeAjmsdlGgUdvPpe"], "female": ["2zRM7PkgwBPiau2jvVXc","wlmwDR77ptH6bKHZui0l"] },
+  "mr": { "male": ["RBxPIvrKOP4ugCK2jVHD","WeK8ylKjTV2trMlayizC","zT03pEAEi0VHKciJODfn"], "female": ["wlmwDR77ptH6bKHZui0l"] },
+  "ta": { "male": ["wiDlejywCB3MR5QRP1k5","5klqvwuBHYwcS99jLmDR"], "female": ["OUBMjq0LvBjb07bhwD3H","u7DoEF74Zzu8FP2dxDfk"] },
+  "te": { "male": ["..."], "female": ["..."] },
+  "gu": { "male": ["nlRBcodAo9LA6ChkhS0i","GrHckCvxYXL9GnnbmdP0","ynwQ4iAoQHX3UyYUkRdP"], "female": ["1qEiC6qsybMkmnNdVMbK"] },
+  "kn": { "male": ["dzooKAnqL8jJ27zWCzUq"], "female": ["1qEiC6qsybMkmnNdVMbK"] },
+  "ml": { "male": ["..."], "female": ["..."] },
+  "bn": { "male": ["..."], "female": ["..."] },
+  "pa": { "male": ["1lO8qxpAhRajh9gUaclp","RxnH5jCRKb1ez2lcmQC1","or7B7ER8jJv0zLEHTMQu","RgArqterc5zx6RLQqzcs"], "female": ["vT0wMbLG5dssaBsksrb6"] },
+  "or": { "male": ["..."], "female": ["..."] },
+  "as": { "male": ["..."], "female": ["..."] }
+}
