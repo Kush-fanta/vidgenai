@@ -9,3 +9,6 @@ temp_*/
 *.mp3
 *.jpg
 *.png
+scripts/
+voice_catalog.json
+voice_pools_enriched.json

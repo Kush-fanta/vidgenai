@@ -68,7 +68,96 @@ def _safe_convert(client, **kwargs):
         k2=dict(kwargs); k2.pop("voice_settings",None)
         return client.text_to_speech.convert(**k2)
 
+from pathlib import Path
+import json
+from typing import Dict, Any, List
 
+def _extract_json_object(text: str) -> str:
+    t = text.strip()
+    start = t.find("{")
+    end = t.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("Could not find JSON object in voice pools file")
+    return t[start:end+1]
+
+def _resolve_voice_pools_path(path_str: str) -> Path:
+    """
+    Resolve voice_pools.json path robustly:
+    - absolute
+    - relative to CWD
+    - relative to app/pipelines
+    - relative to app
+    - relative to backend root
+    """
+    p = Path((path_str or "").strip())
+    if p.is_absolute() and p.exists():
+        return p
+
+    pipelines_dir = Path(__file__).resolve().parent          # app/pipelines
+    app_dir = pipelines_dir.parent                           # app
+    backend_dir = app_dir.parent                             # backend
+
+    candidates = [
+        (Path.cwd() / p),
+        (pipelines_dir / p),
+        (app_dir / p),
+        (backend_dir / p),
+        (pipelines_dir / "voice_pools.json"),
+        (app_dir / "voice_pools.json"),
+        (backend_dir / "voice_pools.json"),
+        (pipelines_dir / "voice_pools.py"),
+        (app_dir / "voice_pools.py"),
+        (backend_dir / "voice_pools.py"),
+    ]
+    for c in candidates:
+        if c.exists():
+            return c.resolve()
+
+    return (Path.cwd() / p).resolve()
+
+def load_voice_pools(path: str) -> Dict[str, Dict[str, List[str]]]:
+    """
+    Loads voice pools from JSON (or JSON embedded inside .py) file.
+
+    Expected format:
+    {
+      "hi": {"male":[...], "female":[...]},
+      "en": {"male":[...], "female":[...]}
+    }
+    """
+    resolved = _resolve_voice_pools_path(path)
+
+    if not resolved.exists():
+        return {}
+
+    raw = resolved.read_text(encoding="utf-8")
+    if resolved.suffix.lower() == ".py":
+        raw = _extract_json_object(raw)
+
+    data = json.loads(raw)
+
+    def _clean_ids(ids: List[Any]) -> List[str]:
+        out: List[str] = []
+        seen = set()
+        for x in ids or []:
+            s = str(x).strip()
+            if not s or s == "..." or "..." in s or s.lower() in {"none", "null"}:
+                continue
+            if s not in seen:
+                out.append(s)
+                seen.add(s)
+        return out
+
+    pools: Dict[str, Dict[str, List[str]]] = {}
+    for lang, gm in (data or {}).items():
+        if not isinstance(gm, dict):
+            continue
+        pools[str(lang).lower().strip()] = {
+            "male": _clean_ids(gm.get("male") or []),
+            "female": _clean_ids(gm.get("female") or []),
+        }
+    return pools
+    
 def generate_voice(state: Dict[str, Any]) -> Dict[str, Any]:
     if not ELEVEN_API_KEY:
         raise ValueError("Missing ELEVEN_API_KEY")
