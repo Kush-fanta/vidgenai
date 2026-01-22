@@ -53,12 +53,12 @@ def generate_project_id(req: CreateProjectRequest):
     payload["max_duration_attempts"] = 2  # backend default
 
     # Template gameplay requirement
-    tid = payload.get("template_id") or "t0"
+    tid = (payload.get("template_id") or "t0").strip()
     if tid in {"t1","t2","t3","t4","t5","t6","t7","t9"} and not payload.get("gameplay_video_path"):
         raise HTTPException(status_code=400, detail=f"gameplay_video_path_required_for_template_{tid}")
 
-    # ✅ STRICT voice requirements (no fallback)
-    vm = (payload.get("voice_mode") or "female").lower()
+    # ✅ STRICT voice requirements (no random fallback)
+    vm = (payload.get("voice_mode") or "female").strip().lower()
     male_id = (payload.get("male_voice_id") or "").strip()
     female_id = (payload.get("female_voice_id") or "").strip()
 
@@ -169,9 +169,7 @@ def voice_male():
     os.environ["ELEVEN_VOICE_POOLS_PATH"] = settings.ELEVEN_VOICE_POOLS_PATH
     pools = load_voice_pools(settings.ELEVEN_VOICE_POOLS_PATH)
 
-    items = []
-    for vid in pools.get("male", []):
-        items.append(CatalogItem(id=vid, name=vid, meta={"gender": "male"}))
+    items = [CatalogItem(id=vid, name=vid, meta={"gender":"male"}) for vid in pools.get("male", [])]
     return CatalogResponse(items=items)
 
 
@@ -181,9 +179,7 @@ def voice_female():
     os.environ["ELEVEN_VOICE_POOLS_PATH"] = settings.ELEVEN_VOICE_POOLS_PATH
     pools = load_voice_pools(settings.ELEVEN_VOICE_POOLS_PATH)
 
-    items = []
-    for vid in pools.get("female", []):
-        items.append(CatalogItem(id=vid, name=vid, meta={"gender": "female"}))
+    items = [CatalogItem(id=vid, name=vid, meta={"gender":"female"}) for vid in pools.get("female", [])]
     return CatalogResponse(items=items)
 
 

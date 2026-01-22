@@ -6,6 +6,7 @@ from app.settings import settings
 
 @lru_cache(maxsize=1)
 def get_client() -> MongoClient:
+    print("Connected succesfully")
     return MongoClient(settings.MONGODB_URI, serverSelectionTimeoutMS=5000)
 
 def get_db():
