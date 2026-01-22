@@ -169,14 +169,9 @@ def voice_male():
     os.environ["ELEVEN_VOICE_POOLS_PATH"] = settings.ELEVEN_VOICE_POOLS_PATH
     pools = load_voice_pools(settings.ELEVEN_VOICE_POOLS_PATH)
 
-    seen=set()
-    items=[]
-    for lang, v in pools.items():
-        for vid in v.get("male", []):
-            if vid in seen:
-                continue
-            seen.add(vid)
-            items.append(CatalogItem(id=vid, name=vid, meta={"lang": lang, "gender":"male"}))
+    items = []
+    for vid in pools.get("male", []):
+        items.append(CatalogItem(id=vid, name=vid, meta={"gender": "male"}))
     return CatalogResponse(items=items)
 
 
@@ -186,14 +181,9 @@ def voice_female():
     os.environ["ELEVEN_VOICE_POOLS_PATH"] = settings.ELEVEN_VOICE_POOLS_PATH
     pools = load_voice_pools(settings.ELEVEN_VOICE_POOLS_PATH)
 
-    seen=set()
-    items=[]
-    for lang, v in pools.items():
-        for vid in v.get("female", []):
-            if vid in seen:
-                continue
-            seen.add(vid)
-            items.append(CatalogItem(id=vid, name=vid, meta={"lang": lang, "gender":"female"}))
+    items = []
+    for vid in pools.get("female", []):
+        items.append(CatalogItem(id=vid, name=vid, meta={"gender": "female"}))
     return CatalogResponse(items=items)
 
 

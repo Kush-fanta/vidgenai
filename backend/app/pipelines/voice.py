@@ -115,20 +115,19 @@ def _resolve_voice_pools_path(path_str: str) -> Path:
 
     return (Path.cwd() / p).resolve()
 
-def load_voice_pools(path: str) -> Dict[str, Dict[str, List[str]]]:
+def load_voice_pools(path: str) -> Dict[str, List[str]]:
     """
-    Loads voice pools from JSON (or JSON embedded inside .py) file.
+    NEW FORMAT:
+      {
+        "male": ["id1","id2",...],
+        "female": ["id1","id2",...]
+      }
 
-    Expected format:
-    {
-      "hi": {"male":[...], "female":[...]},
-      "en": {"male":[...], "female":[...]}
-    }
+    Also supports OLD FORMAT (language-wise) by merging into male/female lists.
     """
     resolved = _resolve_voice_pools_path(path)
-
     if not resolved.exists():
-        return {}
+        return {"male": [], "female": []}
 
     raw = resolved.read_text(encoding="utf-8")
     if resolved.suffix.lower() == ".py":
@@ -148,16 +147,24 @@ def load_voice_pools(path: str) -> Dict[str, Dict[str, List[str]]]:
                 seen.add(s)
         return out
 
-    pools: Dict[str, Dict[str, List[str]]] = {}
-    for lang, gm in (data or {}).items():
-        if not isinstance(gm, dict):
-            continue
-        pools[str(lang).lower().strip()] = {
-            "male": _clean_ids(gm.get("male") or []),
-            "female": _clean_ids(gm.get("female") or []),
+    # ✅ NEW FORMAT
+    if isinstance(data, dict) and ("male" in data or "female" in data) and isinstance(data.get("male", []), list):
+        return {
+            "male": _clean_ids(data.get("male") or []),
+            "female": _clean_ids(data.get("female") or []),
         }
-    return pools
-    
+
+    # ✅ OLD FORMAT fallback: merge all langs
+    male_all: List[Any] = []
+    female_all: List[Any] = []
+    if isinstance(data, dict):
+        for _, gm in data.items():
+            if not isinstance(gm, dict):
+                continue
+            male_all += (gm.get("male") or [])
+            female_all += (gm.get("female") or [])
+    return {"male": _clean_ids(male_all), "female": _clean_ids(female_all)}
+
 def generate_voice(state: Dict[str, Any]) -> Dict[str, Any]:
     if not ELEVEN_API_KEY:
         raise ValueError("Missing ELEVEN_API_KEY")
