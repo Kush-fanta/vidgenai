@@ -129,7 +129,10 @@ def generate_project_id(req: CreateProjectRequest):
     payload = req.model_dump()
     payload["tts_lang"] = derive_tts_lang(payload.get("languages", []))
     payload["max_duration_attempts"] = 2  # backend default
-
+    bmp = payload.get("background_music_path")
+    if isinstance(bmp, str) and bmp.strip().lower() in {"", "none", "null", "string"}:
+        payload["background_music_path"] = None
+    
     # Template gameplay requirement
     tid = (payload.get("template_id") or "t0").strip()
     gp = payload.get("gameplay_video_path")

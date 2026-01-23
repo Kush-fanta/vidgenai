@@ -204,7 +204,7 @@ def apply_template_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # download BGM if URL
     bgm_local = None
-    if bgm_path and str(bgm_path).strip().lower() not in {"none","null",""}:
+    if bgm_path and str(bgm_path).strip().lower() not in {"none","null","","string"}:
         bp = str(bgm_path).strip()
         if is_url(bp):
             bgm_local = download_url_to_file(bp, str((wd/"bgm.mp3").resolve()))
