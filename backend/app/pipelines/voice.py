@@ -104,7 +104,7 @@ def fetch_available_voice_ids(api_key: str) -> Set[str]:
     Source of truth: /v1/voices (supports show_legacy=true).
     """
     r = requests.get(
-        "https://api.elevenlabs.io/v1/voices",
+        "https://api.elevenlabs.io/v3/voices",
         headers={"xi-api-key": api_key},
         params={"show_legacy": "true"},
         timeout=30,

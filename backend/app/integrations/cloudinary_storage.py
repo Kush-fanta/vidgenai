@@ -1,15 +1,15 @@
 # app/integrations/cloudinary_storage.py
 from __future__ import annotations
 
-import os
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
+import cloudinary.utils
 
 from app.settings import settings
 
@@ -22,12 +22,7 @@ def is_url(s: str) -> bool:
 
 
 def init_cloudinary() -> None:
-    """
-    Requires CLOUDINARY_URL to be set (recommended Cloudinary config method).
-    """
     if not settings.CLOUDINARY_URL:
-        # Cloudinary SDK also reads CLOUDINARY_URL from env,
-        # but we enforce it for clarity.
         raise ValueError("CLOUDINARY_URL missing in environment.")
     cloudinary.config(secure=True)
 
@@ -47,7 +42,7 @@ def upload_bytes(
     bio.name = filename
 
     opts: Dict[str, Any] = {
-        "resource_type": resource_type,  # image|video|raw
+        "resource_type": resource_type,
         "folder": folder,
         "overwrite": overwrite,
         "use_filename": True,
@@ -87,7 +82,6 @@ def upload_path(
     if tags:
         opts["tags"] = tags
 
-    # Use chunked upload for large videos
     size = p.stat().st_size
     if resource_type == "video" and size > 100 * 1024 * 1024:
         return cloudinary.uploader.upload_large(str(p), **opts)
@@ -108,16 +102,92 @@ def download_url_to_file(url: str, dest_path: str) -> str:
     return str(dest.resolve())
 
 
-def list_folder_resources(prefix: str, resource_type: str = "video", max_results: int = 100) -> List[Dict[str, Any]]:
+def build_delivery_url(public_id: str, fmt: Optional[str], resource_type: str = "video") -> str:
     """
-    Lists resources under a folder/prefix using Cloudinary Admin API.
-    Good for listing background music assets stored in Cloudinary.
+    Build a secure delivery URL even if Admin API doesn't return secure_url.
     """
     init_cloudinary()
-    res = cloudinary.api.resources(
-        type="upload",
+    url, _ = cloudinary.utils.cloudinary_url(
+        public_id,
         resource_type=resource_type,
-        prefix=prefix,
-        max_results=max_results,
+        secure=True,
+        format=fmt
     )
-    return res.get("resources", [])
+    return url
+
+
+def list_resources_by_prefix(
+    prefix: Optional[str],
+    *,
+    resource_type: str = "video",
+    max_results: int = 100,
+    fields: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Lists resources using Cloudinary Admin API (requires CLOUDINARY_URL with api_key/secret).
+    Supports pagination (next_cursor).
+    """
+    init_cloudinary()
+    out: List[Dict[str, Any]] = []
+    next_cursor: Optional[str] = None
+
+    while True:
+        params: Dict[str, Any] = {
+            "type": "upload",
+            "resource_type": resource_type,
+            "max_results": max_results,
+        }
+        if prefix:
+            params["prefix"] = prefix
+        if next_cursor:
+            params["next_cursor"] = next_cursor
+        if fields:
+            params["fields"] = fields
+
+        resp = cloudinary.api.resources(**params)
+        out.extend(resp.get("resources", []))
+        next_cursor = resp.get("next_cursor")
+        if not next_cursor:
+            break
+
+        # safety cap
+        if len(out) >= 1000:
+            break
+
+    return out
+
+def list_folder_resources(prefix: str, resource_type: str = "video", max_results: int = 100) -> List[Dict[str, Any]]:
+    """
+    Backward-compatible alias used by older route files.
+    """
+    fields = "public_id,format,resource_type,type,bytes,width,height,duration,created_at,secure_url,url,filename,display_name,folder,asset_folder"
+    return list_resources_by_prefix(prefix, resource_type=resource_type, max_results=max_results, fields=fields)
+
+def list_resources_by_asset_folder(asset_folder: str, max_results: int = 100, fields: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Lists assets in a Cloudinary asset folder (dynamic folder mode).
+    This is the correct way when you place files in a UI folder like /gameplay. :contentReference[oaicite:1]{index=1}
+    """
+    init_cloudinary()
+    out: List[Dict[str, Any]] = []
+    next_cursor: Optional[str] = None
+
+    while True:
+        params: Dict[str, Any] = {
+            "asset_folder": asset_folder,
+            "max_results": max_results,
+        }
+        if fields:
+            params["fields"] = fields
+        if next_cursor:
+            params["next_cursor"] = next_cursor
+
+        resp = cloudinary.api.resources_by_asset_folder(**params)  # Admin API wrapper
+        out.extend(resp.get("resources", []))
+        next_cursor = resp.get("next_cursor")
+        if not next_cursor:
+            break
+        if len(out) >= 1000:
+            break
+
+    return out

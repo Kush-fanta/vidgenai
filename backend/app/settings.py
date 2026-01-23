@@ -41,22 +41,26 @@ class Settings:
 
     ELEVEN_VOICE_POOLS_PATH: str = field(default_factory=lambda: os.getenv("ELEVEN_VOICE_POOLS_PATH", "app/pipelines/voice_pools.json"))
 
-    OUTPUT_ROOT: str = field(default_factory=lambda: os.getenv("OUTPUT_ROOT", "outputs"))
-    PROJECT_ROOT: str = field(default_factory=lambda: os.getenv("PROJECT_ROOT", "outputs/projects"))
-    JOB_ROOT: str = field(default_factory=lambda: os.getenv("JOB_ROOT", "outputs/jobs"))
-
     STORE_BACKEND: str = field(default_factory=lambda: os.getenv("STORE_BACKEND", "memory").strip().lower())  # memory|mongo
     MONGODB_URI: str = field(default_factory=lambda: os.getenv("MONGODB_URI", "mongodb://localhost:27017"))
     MONGODB_DB: str = field(default_factory=lambda: os.getenv("MONGODB_DB", "vidgenai"))
 
-    MAX_ACTIVE_JOBS: int = field(default_factory=lambda: _int_env("MAX_ACTIVE_JOBS", 2))
+    MAX_ACTIVE_JOBS: int = field(default_factory=lambda: _int_env("MAX_ACTIVE_JOBS", 50))
 
     # ✅ Cloudinary
     CLOUDINARY_URL: str = field(default_factory=lambda: (os.getenv("CLOUDINARY_URL") or "").strip())
     CLOUDINARY_FOLDER: str = field(default_factory=lambda: os.getenv("CLOUDINARY_FOLDER", "vidgenai").strip())
 
-    # Background music list prefix in Cloudinary
+    # BGM list prefix in Cloudinary
     CLOUDINARY_BGM_PREFIX: str = field(default_factory=lambda: os.getenv("CLOUDINARY_BGM_PREFIX", "vidgenai/backgroundmusic").strip())
+
+    # ✅ Gameplay list prefix (you said folder = /gameplay)
+    # NOTE: Cloudinary "folder" in Media Library may not appear in public_id path.
+    # We'll try this prefix first, then fallback to prefix "clip_" in code.
+    CLOUDINARY_GAMEPLAY_PREFIX: str = field(default_factory=lambda: os.getenv("CLOUDINARY_GAMEPLAY_PREFIX", "gameplay").strip())
+    OUTPUT_ROOT: str = field(default_factory=lambda: os.getenv("OUTPUT_ROOT", "outputs"))
+    PROJECT_ROOT: str = field(default_factory=lambda: os.getenv("PROJECT_ROOT", "outputs/projects"))
+    JOB_ROOT: str = field(default_factory=lambda: os.getenv("JOB_ROOT", "outputs/jobs"))
 
 
 settings = Settings()

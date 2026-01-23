@@ -12,3 +12,6 @@ temp_*/
 scripts/
 voice_catalog.json
 voice_pools_enriched.json
+voice_v3_catalog.json
+voice_pools_v3.json
+voice_check.py

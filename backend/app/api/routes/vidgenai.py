@@ -5,7 +5,7 @@ import os
 import requests
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
-
+import re
 from app.schemas.vidgenai import (
     CreateProjectRequest, CreateProjectResponse,
     ScriptResponse, SceneOut,
@@ -20,7 +20,7 @@ from app.services.vidgen_service import VidGenService, derive_tts_lang
 from app.services.job_service import JobService
 from app.services.store import STORE
 from app.settings import settings
-from app.integrations.cloudinary_storage import list_folder_resources
+from app.integrations.cloudinary_storage import list_folder_resources,list_resources_by_asset_folder,build_delivery_url,is_url
 
 router = APIRouter()
 svc = VidGenService()
@@ -40,6 +40,84 @@ def stream_from_url(url: str, content_type: str, download_filename: str | None =
         headers["Content-Disposition"] = f'attachment; filename="{download_filename}"'
     return StreamingResponse(gen(), media_type=content_type, headers=headers)
 
+def _clean_clip_name(s: str) -> str:
+    """
+    If filename is like clip_003_zsftrl -> return clip_003
+    Only applies to clip_XXX_* pattern.
+    """
+    base = (s or "").strip()
+    m = re.match(r"^(clip_\d{3})(?:[_-][a-z0-9]{4,})$", base, flags=re.IGNORECASE)
+    if m:
+        return m.group(1)
+    return base
+
+@router.get("/gameplay", response_model=CatalogResponse)
+def gameplay_list():
+    fields = "public_id,format,resource_type,bytes,width,height,duration,created_at,secure_url,url,filename,display_name,asset_folder,folder"
+
+    from app.integrations.cloudinary_storage import (
+        list_resources_by_asset_folder,
+        list_resources_by_prefix,
+        build_delivery_url,
+    )
+
+    # ✅ 1) First try: list by asset_folder="gameplay" (your UI folder)
+    resources = []
+    try:
+        resources = list_resources_by_asset_folder("gameplay", max_results=200, fields=fields)
+    except Exception as e:
+        # don’t silently swallow; print to terminal so you can debug
+        print("[gameplay] asset_folder listing failed:", e)
+
+    # ✅ 2) Fallback: prefix listing (if your account is fixed folder mode)
+    if not resources:
+        try:
+            resources = list_resources_by_prefix("gameplay/", resource_type="video", max_results=200, fields=fields)
+        except Exception as e:
+            print("[gameplay] prefix gameplay/ failed:", e)
+
+    # ✅ 3) Last fallback: prefix clip_
+    if not resources:
+        try:
+            resources = list_resources_by_prefix("clip_", resource_type="video", max_results=200, fields=fields)
+        except Exception as e:
+            print("[gameplay] prefix clip_ failed:", e)
+
+    items = []
+    for r in resources:
+        public_id = r.get("public_id")
+        if not public_id:
+            continue
+
+        fmt = r.get("format") or "mp4"
+        url = r.get("secure_url") or r.get("url") or build_delivery_url(public_id, fmt, resource_type="video")
+
+        raw_name = r.get("display_name") or r.get("filename") or public_id.split("/")[-1]
+        name = _clean_clip_name(raw_name)
+
+        # filter videos only (resources_by_asset_folder can return any resource_type)
+        if r.get("resource_type") and r.get("resource_type") != "video":
+            continue
+
+        items.append(
+            CatalogItem(
+                id=public_id,
+                name=name,
+                meta={
+                    "url": url,
+                    "duration": r.get("duration"),
+                    "width": r.get("width"),
+                    "height": r.get("height"),
+                    "bytes": r.get("bytes"),
+                    "created_at": r.get("created_at"),
+                    "asset_folder": r.get("asset_folder"),
+                    "folder": r.get("folder"),
+                },
+            )
+        )
+
+    return CatalogResponse(items=items)
+
 
 @router.post("/generate/project_id", response_model=CreateProjectResponse)
 def generate_project_id(req: CreateProjectRequest):
@@ -54,8 +132,13 @@ def generate_project_id(req: CreateProjectRequest):
 
     # Template gameplay requirement
     tid = (payload.get("template_id") or "t0").strip()
-    if tid in {"t1","t2","t3","t4","t5","t6","t7","t9"} and not payload.get("gameplay_video_path"):
-        raise HTTPException(status_code=400, detail=f"gameplay_video_path_required_for_template_{tid}")
+    gp = payload.get("gameplay_video_path")
+    if tid in {"t1","t2","t3","t4","t5","t6","t7","t9"}:
+        if not gp:
+            raise HTTPException(status_code=400, detail=f"gameplay_video_path_required_for_template_{tid}")
+        # ✅ enforce Cloudinary/URL only
+        if not is_url(str(gp)):
+            raise HTTPException(status_code=400, detail="gameplay_video_path_must_be_a_url")
 
     # ✅ STRICT voice requirements (no random fallback)
     vm = (payload.get("voice_mode") or "female").strip().lower()

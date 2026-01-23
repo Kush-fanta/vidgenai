@@ -1,6 +1,8 @@
 # app/services/vidgen_service.py
 from __future__ import annotations
-
+import os
+from difflib import SequenceMatcher
+from openai import OpenAI
 import json
 from typing import Any, Dict, List
 from uuid import uuid4
@@ -190,31 +192,129 @@ class VidGenService:
         if not scene:
             raise ValueError("scene_not_found")
 
-        base = scene.get("text") or ""
-        query = (
-            "Rewrite the following as a single short scene for a vertical video, same language/script, concise:\n\n"
-            + base
+        base_text = (scene.get("text") or "").strip()
+        if not base_text:
+            base_text = "Rewrite this scene."
+
+        # Helper: similarity to avoid “no change” outputs
+        def sim(a: str, b: str) -> float:
+            a = (a or "").strip()
+            b = (b or "").strip()
+            if not a or not b:
+                return 0.0
+            return SequenceMatcher(None, a, b).ratio()
+
+        # We will try at most 2 times
+        tries = 2
+
+        # Use project language/style
+        tts_lang = proj.get("tts_lang") or "en"
+        lang_label = ", ".join(proj.get("languages") or ["English"])
+        style = proj.get("style") or "Cinematic"
+
+        # Keep roughly the same duration for this scene, if you have it
+        target_sec = scene.get("expected_time_in_seconds") or 8
+        try:
+            target_sec = int(float(target_sec))
+        except Exception:
+            target_sec = 8
+        if target_sec <= 0:
+            target_sec = 8
+
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=(os.getenv("OPENROUTER_API_KEY") or "").strip()
         )
+        if not (os.getenv("OPENROUTER_API_KEY") or "").strip():
+            raise ValueError("OPENROUTER_API_KEY missing/empty.")
 
-        state = {
-            "user_query": query,
-            "languages": proj.get("languages") or ["English"],
-            "style": proj.get("style") or "Cinematic",
-            "tts_lang": proj.get("tts_lang") or "en",
-            "duration_seconds": 10,
-        }
-        out = generate_script(state)
-        raw_json = sanitize_model_json(out["video_script"])
-        data = json.loads(raw_json)
-        first = (data.get("video_script") or [{}])[0]
+        last_err = None
 
-        scene["text"] = first.get("voiceover", scene["text"])
-        scene["expected_time_in_seconds"] = float(first.get("expected_time_in_seconds") or 0) or scene.get("expected_time_in_seconds")
-        scene["visual_keywords"] = first.get("visual_keywords") or scene.get("visual_keywords")
-        scene["overlay_text"] = first.get("overlay_text") or scene.get("overlay_text")
+        for attempt in range(1, tries + 1):
+            # Stronger instruction on attempt 2
+            extra_rule = ""
+            if attempt == 2:
+                extra_rule = (
+                    "\n- IMPORTANT: Do NOT reuse the original phrasing. Paraphrase aggressively. "
+                    "Keep meaning, but change wording.\n"
+                )
 
-        STORE.update_project(project_id, {"scenes": scenes})
-        return scene
+            prompt = f"""
+You are rewriting ONE scene for a vertical faceless video.
+
+Rules:
+- Output ONLY valid JSON, nothing else.
+- Language: {lang_label} (use native script only; no English except proper nouns).
+- Target language code: {tts_lang}.
+- Approx duration: {target_sec} seconds.
+- Include tone tags like [excited], [curious], [laughs] in the voiceover.
+{extra_rule}
+
+Return JSON with EXACT keys:
+{{
+  "voiceover": "...",
+  "visual_keywords": "k1, k2, k3",
+  "overlay_text": "SHORT TEXT",
+  "expected_time_in_seconds": {target_sec}
+}}
+
+Original scene (rewrite this):
+{base_text}
+""".strip()
+
+            try:
+                resp = client.chat.completions.create(
+                    model="google/gemini-2.5-flash-lite",
+                    messages=[
+                        {"role": "system", "content": "Return JSON only."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=600
+                )
+
+                raw = resp.choices[0].message.content
+                clean = sanitize_model_json(raw)
+                data = json.loads(clean)
+
+            # Robust extraction: try multiple possible keys just in case
+                new_voice = (
+                    (data.get("voiceover") or "")
+                    or (data.get("voice_over") or "")
+                    or (data.get("voiceOver") or "")
+                    or (data.get("narration") or "")
+                    or (data.get("text") or "")
+                ).strip()
+
+                new_keywords = (data.get("visual_keywords") or scene.get("visual_keywords") or "").strip()
+                new_overlay  = (data.get("overlay_text") or scene.get("overlay_text") or "").strip()
+                new_time     = data.get("expected_time_in_seconds", scene.get("expected_time_in_seconds"))
+
+                if not new_voice:
+                    raise ValueError("regen_failed_no_voiceover_in_model_output")
+
+            # If it’s basically identical, retry (attempt 2)
+                if sim(new_voice, base_text) > 0.90 and attempt < tries:
+                    continue
+
+            # ✅ Apply updates (THIS fixes your issue)
+                scene["text"] = new_voice
+                scene["visual_keywords"] = new_keywords
+                scene["overlay_text"] = new_overlay
+
+                try:
+                    scene["expected_time_in_seconds"] = float(new_time)
+                except Exception:
+                    pass
+
+                STORE.update_project(project_id, {"scenes": scenes})
+                return scene
+
+            except Exception as e:
+                last_err = e
+
+        # If we exhausted retries
+        raise ValueError(f"scene_regen_failed: {last_err}")
+
 
     def get_last_video_url(self, project_id: str) -> str:
         proj = self._ensure_project(project_id)
