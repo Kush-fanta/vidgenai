@@ -154,14 +154,18 @@ def stitch_final_video(state: Dict[str, Any], output_file: str) -> Dict[str, Any
     generate_combined_ass_subtitles(all_word_segments, scene_durations, subtitle_path)
     state["subtitle_path"] = subtitle_path
 
-    # burn subtitles
-    escaped = subtitle_path.replace("\\","/").replace(":","\\:").replace("'","\\'")
-    cmd2=["ffmpeg","-y","-i",temp_out,"-vf",f"ass='{escaped}'","-c:v","libx264","-preset","fast","-crf","23","-c:a","copy",output_file]
-    subprocess.run(cmd2, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    try:
-        os.remove(temp_out)
-    except OSError:
-        pass
+    # ✅ NO subtitle burning - produce clean video
+    # Just copy the stitched video to output (or rename if single scene)
+    if temp_out != output_file:
+        try:
+            os.rename(temp_out, output_file)
+        except OSError:
+            # If rename fails (cross-device), copy instead
+            import shutil
+            shutil.copy2(temp_out, output_file)
+            try:
+                os.remove(temp_out)
+            except OSError:
+                pass
 
     return state

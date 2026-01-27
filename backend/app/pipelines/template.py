@@ -176,8 +176,8 @@ def apply_template_9(workdir: str, gameplay_local: str, audio_files: List[str], 
     subtitle_path = str((wd / "subtitle.ass").resolve())
     generate_ass_from_audio(audio_files, voice_overs, tts_lang, subtitle_path)
 
-    sp = escape_ass_path(subtitle_path)
-    vf = f"{fit_cover(W,H)},ass='{sp}'"
+    # ✅ NO subtitle burning - produce clean video with gameplay + audio only
+    vf = f"{fit_cover(W,H)}"
 
     cmd = ["ffmpeg","-y","-stream_loop","-1","-i",gameplay_local,"-i",combined_audio,
            "-vf",vf,"-map","0:v","-map","1:a","-t",f"{audio_duration:.3f}",
